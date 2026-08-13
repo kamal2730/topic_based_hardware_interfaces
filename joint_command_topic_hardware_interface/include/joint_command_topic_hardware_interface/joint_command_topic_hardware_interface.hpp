@@ -17,8 +17,10 @@
 #pragma once
 
 // C++
+#include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 // ROS
 #include <hardware_interface/system_interface.hpp>
@@ -44,8 +46,17 @@ public:
   hardware_interface::return_type write(const rclcpp::Time& /*time*/, const rclcpp::Duration& /*period*/) override;
 
 private:
+  struct JointCommandGroup
+  {
+    std::string interface_name;
+    std::vector<std::string> command_keys;
+    control_msgs::msg::JointCommand msg;
+  };
+
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr topic_based_joint_states_subscriber_;
-  rclcpp::Publisher<control_msgs::msg::JointCommand>::SharedPtr topic_based_joint_command_publisher_;
+  std::map<std::string, rclcpp::Publisher<control_msgs::msg::JointCommand>::SharedPtr>
+      topic_based_joint_command_publishers_;
+  std::map<std::string, JointCommandGroup> command_groups_;
   sensor_msgs::msg::JointState latest_joint_state_;
   bool sum_wrapped_joint_states_{ false };
 

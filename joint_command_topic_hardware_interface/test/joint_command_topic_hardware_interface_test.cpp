@@ -197,7 +197,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_position_only
 {
   control_msgs::msg::JointCommand::SharedPtr command_msg;
   auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
-      "/topic_based_joint_commands", rclcpp::QoS(1),
+      "/topic_based_joint_commands/position", rclcpp::QoS(50),
       [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
   executor_->add_node(node_);
 
@@ -232,7 +232,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_position_only
   ASSERT_TRUE(j1_p_c.set_value(0.12));
   ASSERT_TRUE(j2_p_c.set_value(0.14));
 
-  wait_for_publisher("/topic_based_joint_commands");
+  wait_for_publisher("/topic_based_joint_commands/position");
 
   hardware_interface::return_type ret;
   ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
@@ -250,7 +250,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_velocity_only
 {
   control_msgs::msg::JointCommand::SharedPtr command_msg;
   auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
-      "/topic_based_joint_commands", rclcpp::QoS(1),
+      "/topic_based_joint_commands/velocity", rclcpp::QoS(50),
       [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
   executor_->add_node(node_);
 
@@ -285,7 +285,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_velocity_only
   ASSERT_TRUE(j1_v_c.set_value(0.12));
   ASSERT_TRUE(j2_v_c.set_value(0.14));
 
-  wait_for_publisher("/topic_based_joint_commands");
+  wait_for_publisher("/topic_based_joint_commands/velocity");
 
   hardware_interface::return_type ret;
   ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
@@ -303,7 +303,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_effort_only)
 {
   control_msgs::msg::JointCommand::SharedPtr command_msg;
   auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
-      "/topic_based_joint_commands", rclcpp::QoS(1),
+      "/topic_based_joint_commands/effort", rclcpp::QoS(50),
       [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
   executor_->add_node(node_);
 
@@ -338,7 +338,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_effort_only)
   ASSERT_TRUE(j1_e_c.set_value(0.12));
   ASSERT_TRUE(j2_e_c.set_value(0.14));
 
-  wait_for_publisher("/topic_based_joint_commands");
+  wait_for_publisher("/topic_based_joint_commands/effort");
 
   hardware_interface::return_type ret;
   ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
@@ -354,10 +354,14 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_effort_only)
 
 TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_mixed_interfaces)
 {
-  control_msgs::msg::JointCommand::SharedPtr command_msg;
-  auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
-      "/topic_based_joint_commands", rclcpp::QoS(1),
-      [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
+  std::vector<control_msgs::msg::JointCommand::SharedPtr> position_msgs;
+  std::vector<control_msgs::msg::JointCommand::SharedPtr> velocity_msgs;
+  auto position_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/position", rclcpp::QoS(50),
+      [&position_msgs](const control_msgs::msg::JointCommand::SharedPtr msg) { position_msgs.push_back(msg); });
+  auto velocity_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/velocity", rclcpp::QoS(50),
+      [&velocity_msgs](const control_msgs::msg::JointCommand::SharedPtr msg) { velocity_msgs.push_back(msg); });
   executor_->add_node(node_);
 
   const std::string hardware_system_2dof_topic_based =
@@ -391,7 +395,8 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_mixed_interfa
   ASSERT_TRUE(j1_p_c.set_value(0.12));
   ASSERT_TRUE(j2_v_c.set_value(0.24));
 
-  wait_for_publisher("/topic_based_joint_commands");
+  wait_for_publisher("/topic_based_joint_commands/position");
+  wait_for_publisher("/topic_based_joint_commands/velocity");
 
   hardware_interface::return_type ret;
   ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
@@ -399,18 +404,29 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_mixed_interfa
 
   wait_for_msg(std::chrono::milliseconds{ 100 });
 
-  ASSERT_NE(command_msg, nullptr);
-  EXPECT_EQ(command_msg->interface_name, "velocity");
-  EXPECT_THAT(command_msg->joint_names, ::testing::ElementsAre("joint2"));
-  EXPECT_THAT(command_msg->values, ::testing::ElementsAre(0.24));
+  // both the position and the velocity command must arrive
+  ASSERT_GT(position_msgs.size(), 0u);
+  ASSERT_GT(velocity_msgs.size(), 0u);
+
+  EXPECT_EQ(position_msgs.back()->interface_name, "position");
+  EXPECT_THAT(position_msgs.back()->joint_names, ::testing::ElementsAre("joint1"));
+  EXPECT_THAT(position_msgs.back()->values, ::testing::ElementsAre(0.12));
+
+  EXPECT_EQ(velocity_msgs.back()->interface_name, "velocity");
+  EXPECT_THAT(velocity_msgs.back()->joint_names, ::testing::ElementsAre("joint2"));
+  EXPECT_THAT(velocity_msgs.back()->values, ::testing::ElementsAre(0.24));
 }
 
 TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_full_workflow)
 {
-  control_msgs::msg::JointCommand::SharedPtr command_msg;
-  auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
-      "/topic_based_joint_commands", rclcpp::QoS(1),
-      [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
+  control_msgs::msg::JointCommand::SharedPtr position_msg;
+  control_msgs::msg::JointCommand::SharedPtr velocity_msg;
+  auto position_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/position", rclcpp::QoS(50),
+      [&position_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { position_msg = msg; });
+  auto velocity_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/velocity", rclcpp::QoS(50),
+      [&velocity_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { velocity_msg = msg; });
   executor_->add_node(node_);
 
   const std::string hardware_system_2dof_topic_based =
@@ -469,6 +485,9 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_full_workflow
   ASSERT_TRUE(j2_p_c.set_value(0.13));
   ASSERT_TRUE(j2_v_c.set_value(0.14));
 
+  wait_for_publisher("/topic_based_joint_commands/position");
+  wait_for_publisher("/topic_based_joint_commands/velocity");
+
   hardware_interface::return_type ret;
   ASSERT_NO_THROW(ret = rm_->read(TIME, PERIOD).result);
   ASSERT_EQ(ret, hardware_interface::return_type::OK);
@@ -497,4 +516,203 @@ TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_full_workflow
   EXPECT_EQ(j1_v_c.get_optional().value(), 0.12);
   EXPECT_EQ(j2_p_c.get_optional().value(), 0.13);
   EXPECT_EQ(j2_v_c.get_optional().value(), 0.14);
+
+  // one message per interface type must be published
+  wait_for_msg(std::chrono::milliseconds{ 100 });
+
+  ASSERT_NE(position_msg, nullptr);
+  ASSERT_NE(velocity_msg, nullptr);
+  EXPECT_EQ(position_msg->interface_name, "position");
+  EXPECT_THAT(position_msg->joint_names, ::testing::ElementsAre("joint1", "joint2"));
+  EXPECT_THAT(position_msg->values, ::testing::ElementsAre(0.11, 0.13));
+  EXPECT_EQ(velocity_msg->interface_name, "velocity");
+  EXPECT_THAT(velocity_msg->joint_names, ::testing::ElementsAre("joint1", "joint2"));
+  EXPECT_THAT(velocity_msg->values, ::testing::ElementsAre(0.12, 0.14));
+}
+
+TEST_F(TestTopicBasedSystem, topic_based_system_with_mimic_joint)
+{
+  const std::string hardware_system_2dof_with_mimic_joint =
+      R"(
+  <ros2_control name="JointCommandTopicBasedSystem2dofMimic" type="system">
+    <hardware>
+      <plugin>joint_command_topic_hardware_interface/JointCommandTopicSystem</plugin>
+      <param name="joint_commands_topic">/topic_based_joint_commands</param>
+      <param name="joint_states_topic">/topic_based_custom_joint_states</param>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">1.57</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="joint2" mimic="true">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+)";
+  auto urdf = ros2_control_test_assets::urdf_head_mimic + hardware_system_2dof_with_mimic_joint +
+              ros2_control_test_assets::urdf_tail;
+
+  init_rm(urdf);
+
+  // Activate components to get all interfaces available
+  activate_components(*rm_, { "JointCommandTopicBasedSystem2dofMimic" });
+
+  EXPECT_EQ(1u, rm_->system_components_size());
+  ASSERT_EQ(4u, rm_->state_interface_keys().size());
+  ASSERT_EQ(1u, rm_->command_interface_keys().size());
+
+  hardware_interface::LoanedStateInterface j1_p_s = rm_->claim_state_interface("joint1/position");
+  hardware_interface::LoanedStateInterface j1_v_s = rm_->claim_state_interface("joint1/velocity");
+  hardware_interface::LoanedStateInterface j2_p_s = rm_->claim_state_interface("joint2/position");
+  hardware_interface::LoanedStateInterface j2_v_s = rm_->claim_state_interface("joint2/velocity");
+  hardware_interface::LoanedCommandInterface j1_p_c = rm_->claim_command_interface("joint1/position");
+
+  EXPECT_EQ(j1_p_s.get_optional().value(), 1.57);
+  EXPECT_TRUE(std::isnan(j1_v_s.get_optional().value()));
+  EXPECT_TRUE(std::isnan(j2_p_s.get_optional().value()));
+  EXPECT_TRUE(std::isnan(j2_v_s.get_optional().value()));
+  EXPECT_TRUE(std::isnan(j1_p_c.get_optional().value()));
+
+  // set some new values in commands
+  ASSERT_TRUE(j1_p_c.set_value(0.11));
+
+  hardware_interface::return_type ret;
+  ASSERT_NO_THROW(ret = rm_->read(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+
+  // command is not propagated to state until topic from robot is received
+  // but mimic joint should update its state based on the first joint state
+  EXPECT_EQ(j1_p_s.get_optional().value(), 1.57);
+  EXPECT_TRUE(std::isnan(j1_v_s.get_optional().value()));
+  EXPECT_EQ(j2_p_s.get_optional().value(), -2 * 1.57);
+  EXPECT_TRUE(std::isnan(j2_v_s.get_optional().value()));
+  EXPECT_EQ(j1_p_c.get_optional().value(), 0.11);
+
+  publish({ "joint1", "joint2" }, { 0.21, 0.23 }, { 0.22, 0.24 });
+
+  wait_for_msg();
+
+  ASSERT_NO_THROW(ret = rm_->read(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+
+  // new states should have been updated from topic
+  EXPECT_EQ(j1_p_s.get_optional().value(), 0.21);
+  EXPECT_EQ(j1_v_s.get_optional().value(), 0.22);
+  EXPECT_EQ(j2_p_s.get_optional().value(), -2 * 0.21);  // received value ignored due to mimic
+  EXPECT_EQ(j2_v_s.get_optional().value(), -2 * 0.22);  // received value ignored due to mimic
+
+  // commands should remain unchanged
+  EXPECT_EQ(j1_p_c.get_optional().value(), 0.11);
+}
+
+TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_sum_wrapped_joint_states)
+{
+  const std::string hardware_system_2dof_topic_based =
+      R"(
+  <ros2_control name="JointCommandTopicBasedSystem2dof" type="system">
+    <hardware>
+      <plugin>joint_command_topic_hardware_interface/JointCommandTopicSystem</plugin>
+      <param name="joint_commands_topic">/topic_based_joint_commands</param>
+      <param name="joint_states_topic">/topic_based_custom_joint_states</param>
+      <param name="sum_wrapped_joint_states">true</param>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </ros2_control>
+)";
+  auto urdf =
+      ros2_control_test_assets::urdf_head + hardware_system_2dof_topic_based + ros2_control_test_assets::urdf_tail;
+
+  init_rm(urdf);
+
+  activate_components(*rm_, { "JointCommandTopicBasedSystem2dof" });
+
+  hardware_interface::LoanedStateInterface j1_p_s = rm_->claim_state_interface("joint1/position");
+
+  EXPECT_EQ(j1_p_s.get_optional().value(), 0.0);
+
+  hardware_interface::return_type ret;
+
+  // joint state rotates in the positive direction and wraps from 2*pi to -2*pi
+  publish({ "joint1" }, { 3.0 });
+  wait_for_msg();
+  ASSERT_NO_THROW(ret = rm_->read(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  EXPECT_DOUBLE_EQ(j1_p_s.get_optional().value(), 3.0);
+
+  // the reported position jumps from 3.0 to -3.0, the total rotation is kept
+  publish({ "joint1" }, { -3.0 });
+  wait_for_msg();
+  ASSERT_NO_THROW(ret = rm_->read(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  EXPECT_NEAR(j1_p_s.get_optional().value(), 2 * M_PI - 3.0, 1e-9);
+}
+
+TEST_F(TestTopicBasedSystem, topic_based_system_2dof_joint_command_trigger_threshold)
+{
+  control_msgs::msg::JointCommand::SharedPtr command_msg;
+  auto command_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/position", rclcpp::QoS(50),
+      [&command_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { command_msg = msg; });
+  executor_->add_node(node_);
+
+  const std::string hardware_system_2dof_topic_based =
+      R"(
+  <ros2_control name="JointCommandTopicBasedSystem2dof" type="system">
+    <hardware>
+      <plugin>joint_command_topic_hardware_interface/JointCommandTopicSystem</plugin>
+      <param name="joint_commands_topic">/topic_based_joint_commands</param>
+      <param name="joint_states_topic">/topic_based_custom_joint_states</param>
+      <param name="trigger_joint_command_threshold">0.5</param>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </ros2_control>
+)";
+  auto urdf =
+      ros2_control_test_assets::urdf_head + hardware_system_2dof_topic_based + ros2_control_test_assets::urdf_tail;
+
+  init_rm(urdf);
+
+  activate_components(*rm_, { "JointCommandTopicBasedSystem2dof" });
+
+  hardware_interface::LoanedCommandInterface j1_p_c = rm_->claim_command_interface("joint1/position");
+
+  wait_for_publisher("/topic_based_joint_commands/position");
+
+  hardware_interface::return_type ret;
+
+  // difference (0.1) is below the threshold (0.5): the command is not published
+  ASSERT_TRUE(j1_p_c.set_value(0.1));
+  ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  wait_for_msg(std::chrono::milliseconds{ 100 });
+  EXPECT_EQ(command_msg, nullptr);
+
+  // difference (1.6) is above the threshold (0.5): the command is published
+  ASSERT_TRUE(j1_p_c.set_value(1.6));
+  ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+  wait_for_msg(std::chrono::milliseconds{ 100 });
+
+  ASSERT_NE(command_msg, nullptr);
+  EXPECT_THAT(command_msg->joint_names, ::testing::ElementsAre("joint1"));
+  EXPECT_EQ(command_msg->interface_name, "position");
+  EXPECT_THAT(command_msg->values, ::testing::ElementsAre(1.6));
 }

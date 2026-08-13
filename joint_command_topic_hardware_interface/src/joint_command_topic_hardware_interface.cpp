@@ -16,9 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <limits>
 #include <map>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -70,8 +68,34 @@ CallbackReturn JointCommandTopicSystem::on_init(const hardware_interface::Hardwa
       get_hardware_parameter("joint_states_topic", "/robot_joint_states"), rclcpp::SensorDataQoS(),
       [this](const sensor_msgs::msg::JointState::SharedPtr joint_state) { latest_joint_state_ = *joint_state; });
 
-  topic_based_joint_command_publisher_ = get_node()->create_publisher<control_msgs::msg::JointCommand>(
-      get_hardware_parameter("joint_commands_topic", "/robot_joint_commands"), rclcpp::QoS(1));
+  const auto joint_commands_topic = get_hardware_parameter("joint_commands_topic", "/robot_joint_commands");
+  const auto& joints = get_hardware_info().joints;
+  for (std::size_t i = 0; i < joints.size(); ++i)
+  {
+    for (const auto& interface : joints[i].command_interfaces)
+    {
+      const bool supported_command_interface = interface.name == hardware_interface::HW_IF_POSITION ||
+                                               interface.name == hardware_interface::HW_IF_VELOCITY ||
+                                               interface.name == hardware_interface::HW_IF_EFFORT;
+      if (!supported_command_interface)
+      {
+        RCLCPP_WARN_ONCE(get_node()->get_logger(), "Joint '%s' has unsupported command interfaces found: %s.",
+                         joints[i].name.c_str(), interface.name.c_str());
+        continue;
+      }
+      if (topic_based_joint_command_publishers_.find(interface.name) == topic_based_joint_command_publishers_.end())
+      {
+        topic_based_joint_command_publishers_[interface.name] =
+            get_node()->create_publisher<control_msgs::msg::JointCommand>(joint_commands_topic + "/" + interface.name,
+                                                                          rclcpp::QoS(1));
+      }
+      auto& group = command_groups_[interface.name];
+      group.interface_name = interface.name;
+      group.msg.interface_name = interface.name;
+      group.msg.joint_names.push_back(joints[i].name);
+      group.command_keys.push_back(joints[i].name + "/" + interface.name);
+    }
+  }
 
   // if the values on the `joint_states_topic` are wrapped between -2*pi and 2*pi (like they are in Isaac Sim)
   // sum the total joint rotation returned on the `joint_state_values_` interface
@@ -186,32 +210,18 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
     return hardware_interface::return_type::OK;
   }
 
-  std::map<std::string, control_msgs::msg::JointCommand> commands_by_interface;
-  for (std::size_t i = 0; i < joints.size(); ++i)
-  {
-    for (const auto& interface : joints[i].command_interfaces)
-    {
-      const bool supported_command_interface = interface.name == hardware_interface::HW_IF_POSITION ||
-                                               interface.name == hardware_interface::HW_IF_VELOCITY ||
-                                               interface.name == hardware_interface::HW_IF_EFFORT;
-      if (!supported_command_interface)
-      {
-        continue;
-      }
-      if (commands_by_interface.find(interface.name) == commands_by_interface.end())
-      {
-        commands_by_interface[interface.name].header.stamp = get_node()->now();
-        commands_by_interface[interface.name].interface_name = interface.name;
-      }
-      commands_by_interface[interface.name].joint_names.push_back(joints[i].name);
-      commands_by_interface[interface.name].values.push_back(get_command(joints[i].name + "/" + interface.name));
-    }
-  }
   if (rclcpp::ok())
   {
-    for (auto& [interface_name, msg] : commands_by_interface)
+    for (auto& [interface_name, group] : command_groups_)
     {
-      topic_based_joint_command_publisher_->publish(msg);
+      auto& msg = group.msg;
+      msg.header.stamp = get_node()->now();
+      msg.values.resize(group.command_keys.size());
+      for (std::size_t i = 0; i < group.command_keys.size(); ++i)
+      {
+        msg.values[i] = get_command(group.command_keys[i]);
+      }
+      topic_based_joint_command_publishers_.at(interface_name)->publish(msg);
     }
   }
 
