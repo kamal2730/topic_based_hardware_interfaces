@@ -15,6 +15,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   control_msgs
   rclcpp
   hardware_interface
+  realtime_tools
   sensor_msgs
 )
 
@@ -36,6 +37,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
                       angles::angles
                       rclcpp::rclcpp
                       hardware_interface::hardware_interface
+                      realtime_tools::realtime_tools
                       ${control_msgs_TARGETS}
                       ${sensor_msgs_TARGETS})
 target_include_directories(${PROJECT_NAME}

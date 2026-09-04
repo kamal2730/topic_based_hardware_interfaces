@@ -11,7 +11,7 @@ The `joint_command_topic_hardware_interface` has a few `ros2_control` urdf tags 
 * joint_commands_topic: (default: "/robot_joint_commands"). Base topic for the joint command topics. Example: `<param name="joint_commands_topic">/my_topic_joint_commands</param>`.
 * joint_states_topic: (default: "/robot_joint_states"). Example: `<param name="joint_states_topic">/my_topic_joint_states</param>`.
 * trigger_joint_command_threshold: (default: 1e-5). Used to avoid spamming the joint command topic when the difference between the current joint state and the joint command is smaller than this value, set to -1 to always send the joint command. Example: `<param name="trigger_joint_command_threshold">0.001</param>`.
-* sum_wrapped_joint_states: (default: "false"). Used to track the total rotation for joint states the values reported on the `joint_commands_topic` wrap from 2*pi to -2*pi when rotating in the positive direction. (Isaac Sim only reports joint states from 2*pi to -2*pi) Example: `<param name="sum_wrapped_joint_states">true</param>`.
+* sum_wrapped_joint_states: (default: "false"). Used to track the total rotation for joint states the values reported on the `joint_states_topic` wrap from 2*pi to -2*pi when rotating in the positive direction. (Isaac Sim only reports joint states from 2*pi to -2*pi) Example: `<param name="sum_wrapped_joint_states">true</param>`.
 
 ### Per-joint Parameters
 
@@ -41,10 +41,12 @@ The `joint_command_topic_hardware_interface` has a few `ros2_control` urdf tags 
 
 ## Topics
 
-For each `write()` call, one `control_msgs/JointCommand` message is published per interface type to a topic derived from the `joint_commands_topic` parameter:
+On a `write()` call that passes the `trigger_joint_command_threshold` check, one `control_msgs/JointCommand` message is published per interface type to a topic derived from the `joint_commands_topic` parameter:
 
 * `<joint_commands_topic>/position`: contains the joints that expose a `position` command interface.
 * `<joint_commands_topic>/velocity`: contains the joints that expose a `velocity` command interface.
 * `<joint_commands_topic>/effort`: contains the joints that expose an `effort` command interface.
 
-Each message carries the joints of that interface type in its `joint_names` field, the matching command values in `values`, and the interface type in `interface_name`. Subscribers must listen on the topic that matches the interface they are interested in, e.g. with the default parameter a joint with `position` and `velocity` command interfaces publishes to `/robot_joint_commands/position` and `/robot_joint_commands/velocity` every cycle.
+Each message carries the joints of that interface type in its `joint_names` field, the matching command values in `values`, and the interface type in `interface_name`. Subscribers must listen on the topic that matches the interface they are interested in, e.g. with the default parameter a joint with `position` and `velocity` command interfaces publishes to `/robot_joint_commands/position` and `/robot_joint_commands/velocity`.
+
+No message is published while the summed difference between the joint states and the joint commands stays at or below `trigger_joint_command_threshold`, which is the steady state once a controller has converged. Set the threshold to -1 to publish on every cycle.

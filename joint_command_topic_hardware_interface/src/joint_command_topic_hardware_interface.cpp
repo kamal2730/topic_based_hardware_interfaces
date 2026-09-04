@@ -66,7 +66,9 @@ CallbackReturn JointCommandTopicSystem::on_init(const hardware_interface::Hardwa
 
   topic_based_joint_states_subscriber_ = get_node()->create_subscription<sensor_msgs::msg::JointState>(
       get_hardware_parameter("joint_states_topic", "/robot_joint_states"), rclcpp::SensorDataQoS(),
-      [this](const sensor_msgs::msg::JointState::SharedPtr joint_state) { latest_joint_state_ = *joint_state; });
+      [this](const sensor_msgs::msg::JointState::SharedPtr joint_state) {
+        latest_joint_state_.writeFromNonRT(*joint_state);
+      });
 
   const auto joint_commands_topic = get_hardware_parameter("joint_commands_topic", "/robot_joint_commands");
   const auto& joints = get_hardware_info().joints;
@@ -111,10 +113,11 @@ hardware_interface::return_type JointCommandTopicSystem::read(const rclcpp::Time
                                                               const rclcpp::Duration& /*period*/)
 {
   const auto& joints = get_hardware_info().joints;
-  for (std::size_t i = 0; i < latest_joint_state_.name.size(); ++i)
+  const auto& joint_state = *latest_joint_state_.readFromRT();
+  for (std::size_t i = 0; i < joint_state.name.size(); ++i)
   {
     const auto it = std::find_if(joints.begin(), joints.end(),
-                                 [name = latest_joint_state_.name[i]](const hardware_interface::ComponentInfo& joint) {
+                                 [name = joint_state.name[i]](const hardware_interface::ComponentInfo& joint) {
                                    return joint.name == name;
                                  });
     if (it != joints.end())
@@ -129,29 +132,27 @@ hardware_interface::return_type JointCommandTopicSystem::read(const rclcpp::Time
         continue;
       }
 
-      if (!latest_joint_state_.position.empty() && std::isfinite(latest_joint_state_.position.at(i)))
+      // sensor_msgs/JointState allows position, velocity and effort to be shorter than name
+      if (i < joint_state.position.size() && std::isfinite(joint_state.position[i]))
       {
         if (sum_wrapped_joint_states_)
         {
-          auto name = latest_joint_state_.name[i] + "/" + hardware_interface::HW_IF_POSITION;
+          auto name = joint_state.name[i] + "/" + hardware_interface::HW_IF_POSITION;
 
-          set_state(name, sumRotationFromMinus2PiTo2Pi(latest_joint_state_.position.at(i), get_state(name)));
+          set_state(name, sumRotationFromMinus2PiTo2Pi(joint_state.position[i], get_state(name)));
         }
         else
         {
-          set_state(latest_joint_state_.name[i] + "/" + hardware_interface::HW_IF_POSITION,
-                    latest_joint_state_.position.at(i));
+          set_state(joint_state.name[i] + "/" + hardware_interface::HW_IF_POSITION, joint_state.position[i]);
         }
       }
-      if (!latest_joint_state_.velocity.empty() && std::isfinite(latest_joint_state_.velocity.at(i)))
+      if (i < joint_state.velocity.size() && std::isfinite(joint_state.velocity[i]))
       {
-        set_state(latest_joint_state_.name[i] + "/" + hardware_interface::HW_IF_VELOCITY,
-                  latest_joint_state_.velocity.at(i));
+        set_state(joint_state.name[i] + "/" + hardware_interface::HW_IF_VELOCITY, joint_state.velocity[i]);
       }
-      if (!latest_joint_state_.effort.empty() && std::isfinite(latest_joint_state_.effort.at(i)))
+      if (i < joint_state.effort.size() && std::isfinite(joint_state.effort[i]))
       {
-        set_state(latest_joint_state_.name[i] + "/" + hardware_interface::HW_IF_EFFORT,
-                  latest_joint_state_.effort.at(i));
+        set_state(joint_state.name[i] + "/" + hardware_interface::HW_IF_EFFORT, joint_state.effort[i]);
       }
     }
   }
@@ -200,9 +201,14 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
       {
         continue;
       }
+      const auto interface_key = joints[i].name + "/" + interface.name;
+      // a command interface without a matching state interface cannot contribute to the difference
+      if (!has_state(interface_key))
+      {
+        continue;
+      }
       // sum the absolute difference for all joints
-      diff += std::abs(get_state(joints[i].name + "/" + interface.name) -
-                       get_command(joints[i].name + "/" + interface.name));
+      diff += std::abs(get_state(interface_key) - get_command(interface_key));
     }
   }
   if (diff <= trigger_joint_command_threshold_)

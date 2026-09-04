@@ -28,6 +28,7 @@
 #include <rclcpp/node.hpp>
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/subscription.hpp>
+#include <realtime_tools/realtime_buffer.hpp>
 
 #include <control_msgs/msg/joint_command.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -57,7 +58,7 @@ private:
   std::map<std::string, rclcpp::Publisher<control_msgs::msg::JointCommand>::SharedPtr>
       topic_based_joint_command_publishers_;
   std::map<std::string, JointCommandGroup> command_groups_;
-  sensor_msgs::msg::JointState latest_joint_state_;
+  realtime_tools::RealtimeBuffer<sensor_msgs::msg::JointState> latest_joint_state_;
   bool sum_wrapped_joint_states_{ false };
 
   // If the difference between the current joint state and joint command is less than this value,
