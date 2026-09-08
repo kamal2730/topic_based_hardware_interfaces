@@ -825,3 +825,60 @@ TEST_F(TestTopicBasedSystem, topic_based_system_partially_populated_joint_state)
   EXPECT_EQ(j1_p_s.get_optional().value(), 0.1);
   EXPECT_EQ(j2_p_s.get_optional().value(), 5.0);
 }
+
+TEST_F(TestTopicBasedSystem, topic_based_system_undriven_interface_is_not_published)
+{
+  control_msgs::msg::JointCommand::SharedPtr position_msg;
+  control_msgs::msg::JointCommand::SharedPtr velocity_msg;
+  auto position_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/position", rclcpp::QoS(50),
+      [&position_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { position_msg = msg; });
+  auto velocity_subscriber = node_->create_subscription<control_msgs::msg::JointCommand>(
+      "/topic_based_joint_commands/velocity", rclcpp::QoS(50),
+      [&velocity_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { velocity_msg = msg; });
+  executor_->add_node(node_);
+
+  // joint1 exposes a velocity command interface that no controller writes to, so it stays NaN
+  const std::string hardware_system_2dof_topic_based =
+      R"(
+  <ros2_control name="JointCommandTopicBasedSystem2dof" type="system">
+    <hardware>
+      <plugin>joint_command_topic_hardware_interface/JointCommandTopicSystem</plugin>
+      <param name="joint_commands_topic">/topic_based_joint_commands</param>
+      <param name="joint_states_topic">/topic_based_custom_joint_states</param>
+    </hardware>
+    <joint name="joint1">
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </ros2_control>
+)";
+  auto urdf =
+      ros2_control_test_assets::urdf_head + hardware_system_2dof_topic_based + ros2_control_test_assets::urdf_tail;
+
+  init_rm(urdf);
+
+  activate_components(*rm_, { "JointCommandTopicBasedSystem2dof" });
+
+  hardware_interface::LoanedCommandInterface j1_p_c = rm_->claim_command_interface("joint1/position");
+
+  ASSERT_TRUE(j1_p_c.set_value(1.0));
+
+  wait_for_publisher("/topic_based_joint_commands/position");
+
+  hardware_interface::return_type ret;
+  ASSERT_NO_THROW(ret = rm_->write(TIME, PERIOD).result);
+  ASSERT_EQ(ret, hardware_interface::return_type::OK);
+
+  wait_for_msg(std::chrono::milliseconds{ 100 });
+
+  ASSERT_NE(position_msg, nullptr);
+  EXPECT_THAT(position_msg->joint_names, ::testing::ElementsAre("joint1"));
+  EXPECT_THAT(position_msg->values, ::testing::ElementsAre(1.0));
+
+  // nothing drives the velocity interface, so no velocity command must be published
+  EXPECT_EQ(velocity_msg, nullptr);
+}

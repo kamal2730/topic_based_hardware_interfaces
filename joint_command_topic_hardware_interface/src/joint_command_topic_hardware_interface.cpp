@@ -94,7 +94,7 @@ CallbackReturn JointCommandTopicSystem::on_init(const hardware_interface::Hardwa
       auto& group = command_groups_[interface.name];
       group.interface_name = interface.name;
       group.msg.interface_name = interface.name;
-      group.msg.joint_names.push_back(joints[i].name);
+      group.joint_names.push_back(joints[i].name);
       group.command_keys.push_back(joints[i].name + "/" + interface.name);
     }
   }
@@ -207,8 +207,14 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
       {
         continue;
       }
+      // an interface no controller drives holds NaN, which would poison the comparison below
+      const auto command = get_command(interface_key);
+      if (!std::isfinite(command))
+      {
+        continue;
+      }
       // sum the absolute difference for all joints
-      diff += std::abs(get_state(interface_key) - get_command(interface_key));
+      diff += std::abs(get_state(interface_key) - command);
     }
   }
   if (diff <= trigger_joint_command_threshold_)
@@ -221,12 +227,23 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
     for (auto& [interface_name, group] : command_groups_)
     {
       auto& msg = group.msg;
-      msg.header.stamp = get_node()->now();
-      msg.values.resize(group.command_keys.size());
+      msg.joint_names.clear();
+      msg.values.clear();
       for (std::size_t i = 0; i < group.command_keys.size(); ++i)
       {
-        msg.values[i] = get_command(group.command_keys[i]);
+        const auto command = get_command(group.command_keys[i]);
+        if (!std::isfinite(command))
+        {
+          continue;
+        }
+        msg.joint_names.push_back(group.joint_names[i]);
+        msg.values.push_back(command);
       }
+      if (msg.joint_names.empty())
+      {
+        continue;
+      }
+      msg.header.stamp = get_node()->now();
       topic_based_joint_command_publishers_.at(interface_name)->publish(msg);
     }
   }

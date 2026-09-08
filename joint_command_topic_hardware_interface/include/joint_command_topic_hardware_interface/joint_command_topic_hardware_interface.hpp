@@ -50,6 +50,7 @@ private:
   struct JointCommandGroup
   {
     std::string interface_name;
+    std::vector<std::string> joint_names;
     std::vector<std::string> command_keys;
     control_msgs::msg::JointCommand msg;
   };

@@ -43,10 +43,12 @@ The `joint_command_topic_hardware_interface` has a few `ros2_control` urdf tags 
 
 On a `write()` call that passes the `trigger_joint_command_threshold` check, one `control_msgs/JointCommand` message is published per interface type to a topic derived from the `joint_commands_topic` parameter:
 
-* `<joint_commands_topic>/position`: contains the joints that expose a `position` command interface.
-* `<joint_commands_topic>/velocity`: contains the joints that expose a `velocity` command interface.
-* `<joint_commands_topic>/effort`: contains the joints that expose an `effort` command interface.
+* `<joint_commands_topic>/position`: the joints whose `position` command is being driven.
+* `<joint_commands_topic>/velocity`: the joints whose `velocity` command is being driven.
+* `<joint_commands_topic>/effort`: the joints whose `effort` command is being driven.
 
-Each message carries the joints of that interface type in its `joint_names` field, the matching command values in `values`, and the interface type in `interface_name`. Subscribers must listen on the topic that matches the interface they are interested in, e.g. with the default parameter a joint with `position` and `velocity` command interfaces publishes to `/robot_joint_commands/position` and `/robot_joint_commands/velocity`.
+Each message carries those joints in its `joint_names` field, the matching command values in `values`, and the interface type in `interface_name`. Subscribers must listen on the topic that matches the interface they are interested in, e.g. with the default parameter a joint with `position` and `velocity` command interfaces publishes to `/robot_joint_commands/position` and `/robot_joint_commands/velocity`.
+
+A command interface that no active controller writes to holds `NaN`. Such a joint is left out of its message, and an interface type where no joint is driven at all is not published, so a subscriber never has to filter `NaN` out itself. Declaring a command interface therefore does not on its own guarantee traffic on the matching topic.
 
 No message is published while the summed difference between the joint states and the joint commands stays at or below `trigger_joint_command_threshold`, which is the steady state once a controller has converged. Set the threshold to -1 to publish on every cycle.
