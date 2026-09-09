@@ -5,7 +5,6 @@
   <description>ros2_control hardware interface for JointCommand topic based control</description>
 
   <maintainer email="marq.razz@gmail.com">Marq Rasmussen</maintainer>
-  <maintainer email="jafar.uruc@gmail.com">Jafar Uruc</maintainer>
   <maintainer email="bence.magyar.robotics@gmail.com">Bence Magyar</maintainer>
   <maintainer email="christoph.froehlich@ait.ac.at">Christoph Froehlich</maintainer>
 
