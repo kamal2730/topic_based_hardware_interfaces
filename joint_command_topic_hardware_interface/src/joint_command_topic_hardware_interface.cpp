@@ -34,7 +34,6 @@ double sumRotationFromMinus2PiTo2Pi(const double current_wrapped_rad, double tot
   angles::shortest_angular_distance_with_large_limits(total_rotation_in, current_wrapped_rad, 2 * M_PI, -2 * M_PI,
                                                       delta);
 
-  // Add the corrected delta to the total rotation
   return total_rotation_in + delta;
 }
 }  // namespace
@@ -100,7 +99,6 @@ CallbackReturn JointCommandTopicSystem::on_init(const hardware_interface::Hardwa
   }
 
   // if the values on the `joint_states_topic` are wrapped between -2*pi and 2*pi (like they are in Isaac Sim)
-  // sum the total joint rotation returned on the `joint_state_values_` interface
   if (get_hardware_parameter("sum_wrapped_joint_states", "false") == "true")
   {
     sum_wrapped_joint_states_ = true;
@@ -157,7 +155,6 @@ hardware_interface::return_type JointCommandTopicSystem::read(const rclcpp::Time
     }
   }
 
-  // Update mimic joints
   for (const auto& mimic_joint : get_hardware_info().mimic_joints)
   {
     const auto& mimic_joint_name = joints.at(mimic_joint.joint_index).name;
@@ -213,7 +210,6 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
       {
         continue;
       }
-      // sum the absolute difference for all joints
       diff += std::abs(get_state(interface_key) - command);
     }
   }

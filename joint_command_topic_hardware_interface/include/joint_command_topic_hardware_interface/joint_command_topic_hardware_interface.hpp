@@ -44,7 +44,7 @@ public:
 
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
-  hardware_interface::return_type write(const rclcpp::Time& /*time*/, const rclcpp::Duration& /*period*/) override;
+  hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
 private:
   struct JointCommandGroup
@@ -62,8 +62,6 @@ private:
   realtime_tools::RealtimeBuffer<sensor_msgs::msg::JointState> latest_joint_state_;
   bool sum_wrapped_joint_states_{ false };
 
-  // If the difference between the current joint state and joint command is less than this value,
-  // the joint command will not be published.
   double trigger_joint_command_threshold_ = 1e-5;
 };
 
