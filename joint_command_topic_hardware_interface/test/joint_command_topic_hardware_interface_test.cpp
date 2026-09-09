@@ -725,9 +725,8 @@ TEST_F(TestTopicBasedSystem, topic_based_system_joint_command_without_matching_s
       [&effort_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { effort_msg = msg; });
   executor_->add_node(node_);
 
-  // joint1 exposes an effort command interface but no effort state interface, so the
-  // state-vs-command difference cannot be computed for it. joint2 is what carries the
-  // difference past the trigger threshold so that a publish actually happens.
+  // joint1 has an effort command but no effort state, joint2 is there to push the
+  // difference past the trigger threshold
   const std::string hardware_system_2dof_topic_based =
       R"(
   <ros2_control name="JointCommandTopicBasedSystem2dof" type="system">
@@ -814,7 +813,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_partially_populated_joint_state)
   hardware_interface::LoanedStateInterface j1_p_s = rm_->claim_state_interface("joint1/position");
   hardware_interface::LoanedStateInterface j2_p_s = rm_->claim_state_interface("joint2/position");
 
-  // two names but only one position value, which sensor_msgs/JointState permits
+  // two names, one position value
   publish({ "joint1", "joint2" }, { 0.1 });
   wait_for_msg();
 
@@ -838,7 +837,7 @@ TEST_F(TestTopicBasedSystem, topic_based_system_undriven_interface_is_not_publis
       [&velocity_msg](const control_msgs::msg::JointCommand::SharedPtr msg) { velocity_msg = msg; });
   executor_->add_node(node_);
 
-  // joint1 exposes a velocity command interface that no controller writes to, so it stays NaN
+  // nothing claims joint1/velocity, so it stays NaN
   const std::string hardware_system_2dof_topic_based =
       R"(
   <ros2_control name="JointCommandTopicBasedSystem2dof" type="system">
@@ -879,6 +878,5 @@ TEST_F(TestTopicBasedSystem, topic_based_system_undriven_interface_is_not_publis
   EXPECT_THAT(position_msg->joint_names, ::testing::ElementsAre("joint1"));
   EXPECT_THAT(position_msg->values, ::testing::ElementsAre(1.0));
 
-  // nothing drives the velocity interface, so no velocity command must be published
   EXPECT_EQ(velocity_msg, nullptr);
 }

@@ -130,7 +130,7 @@ hardware_interface::return_type JointCommandTopicSystem::read(const rclcpp::Time
         continue;
       }
 
-      // sensor_msgs/JointState allows position, velocity and effort to be shorter than name
+      // these arrays are allowed to be shorter than name
       if (i < joint_state.position.size() && std::isfinite(joint_state.position[i]))
       {
         if (sum_wrapped_joint_states_)
@@ -199,12 +199,12 @@ hardware_interface::return_type JointCommandTopicSystem::write(const rclcpp::Tim
         continue;
       }
       const auto interface_key = joints[i].name + "/" + interface.name;
-      // a command interface without a matching state interface cannot contribute to the difference
+      // nothing to compare against
       if (!has_state(interface_key))
       {
         continue;
       }
-      // an interface no controller drives holds NaN, which would poison the comparison below
+      // undriven interfaces are NaN and would make diff NaN too
       const auto command = get_command(interface_key);
       if (!std::isfinite(command))
       {
